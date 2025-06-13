@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campaign Reports</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .report-container {
+            padding: 20px;
+        }
+        .report-selector {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .report-selector label {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .report-selector select {
+            flex-grow: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .report-selector button {
+            padding: 8px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .report-selector button:hover {
+            background-color: #0056b3;
+        }
+
+        #report_display_area {
+            display: none; /* Hidden by default */
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        #report_display_area h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .stats-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px; /* Space between cards */
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            flex: 1 1 200px; /* Flex properties for responsiveness */
+            min-width: 180px; /* Minimum width before wrapping */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .stat-card h4 {
+            margin-top: 0;
+            font-size: 1.1em;
+            color: #555;
+        }
+        .stat-card .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        .stat-card .rate {
+            font-size: 0.9em;
+            color: #777;
+        }
+        .chart-placeholder {
+            border: 1px dashed #ccc;
+            padding: 20px;
+            text-align: center;
+            color: #777;
+            background-color: #fdfdfd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Campaign Reports</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <!-- Add other relevant links as needed -->
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container report-container">
+        <div class="report-selector">
+            <label for="report_campaign_select">Select Campaign:</label>
+            <select id="report_campaign_select" name="report_campaign_select">
+                <option value="">-- Choose a Campaign --</option>
+                <option value="Summer Sale 2024">Summer Sale 2024</option>
+                <option value="New Product Launch Q1">New Product Launch Q1</option>
+                <option value="Weekly Newsletter - Oct W3">Weekly Newsletter - Oct W3</option>
+            </select>
+            <button type="button" onclick="handleViewReport()">View Report</button>
+        </div>
+
+        <div id="report_display_area">
+            <h2 id="report_campaign_title"></h2>
+
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <h4>Total Sent</h4>
+                    <p class="value" id="stat_total_sent">-</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Delivered</h4>
+                    <p class="value" id="stat_total_delivered">-</p>
+                    <p class="rate" id="stat_delivery_rate">-</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Opened</h4>
+                    <p class="value" id="stat_total_opened">-</p>
+                    <p class="rate" id="stat_open_rate">-</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Clicked</h4>
+                    <p class="value" id="stat_total_clicked">-</p>
+                    <p class="rate" id="stat_click_rate_sent">- (on sent)</p>
+                    <p class="rate" id="stat_click_rate_opened">- (on opened)</p>
+                </div>
+                 <div class="stat-card">
+                    <h4>Total Bounced</h4>
+                    <p class="value" id="stat_total_bounced">-</p>
+                    <p class="rate" id="stat_bounce_rate">-</p>
+                </div>
+            </div>
+
+            <h3>Charts & Visualizations</h3>
+            <div class="chart-placeholder">
+                <p>Chart: Opens vs Clicks Over Time (Placeholder)</p>
+            </div>
+            <div class="chart-placeholder">
+                <p>Chart: Event Type Distribution (Pie Chart Placeholder)</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dummyReports = {
+          "Summer Sale 2024": {
+            name: "Summer Sale 2024",
+            total_sent: 1000,
+            total_delivered: 980,
+            delivery_rate_on_sent: "98.00%",
+            total_opened: 250,
+            open_rate_on_sent: "25.00%",
+            total_clicked: 50,
+            click_rate_on_sent: "5.00%",
+            click_rate_on_opened: "20.00%",
+            total_bounced: 20,
+            bounce_rate_on_sent: "2.00%"
+          },
+          "New Product Launch Q1": {
+            name: "New Product Launch Q1",
+            total_sent: 5000,
+            total_delivered: 4850,
+            delivery_rate_on_sent: "97.00%",
+            total_opened: 1200,
+            open_rate_on_sent: "24.00%",
+            total_clicked: 300,
+            click_rate_on_sent: "6.00%",
+            click_rate_on_opened: "25.00%",
+            total_bounced: 150,
+            bounce_rate_on_sent: "3.00%"
+          },
+          "Weekly Newsletter - Oct W3": {
+            name: "Weekly Newsletter - Oct W3",
+            total_sent: 500,
+            total_delivered: 490,
+            delivery_rate_on_sent: "98.00%",
+            total_opened: 150,
+            open_rate_on_sent: "30.00%",
+            total_clicked: 25,
+            click_rate_on_sent: "5.00%",
+            click_rate_on_opened: "16.67%",
+            total_bounced: 5,
+            bounce_rate_on_sent: "1.00%"
+          }
+        };
+
+        function displayCampaignReport(campaignData) {
+            document.getElementById('report_campaign_title').textContent = campaignData.name;
+
+            document.getElementById('stat_total_sent').textContent = campaignData.total_sent;
+            document.getElementById('stat_total_delivered').textContent = campaignData.total_delivered;
+            document.getElementById('stat_delivery_rate').textContent = `Delivery Rate: ${campaignData.delivery_rate_on_sent}`;
+
+            document.getElementById('stat_total_opened').textContent = campaignData.total_opened;
+            document.getElementById('stat_open_rate').textContent = `Open Rate (on sent): ${campaignData.open_rate_on_sent}`;
+
+            document.getElementById('stat_total_clicked').textContent = campaignData.total_clicked;
+            document.getElementById('stat_click_rate_sent').textContent = `Click Rate (on sent): ${campaignData.click_rate_on_sent}`;
+            document.getElementById('stat_click_rate_opened').textContent = `CTOR: ${campaignData.click_rate_on_opened}`;
+
+            document.getElementById('stat_total_bounced').textContent = campaignData.total_bounced;
+            document.getElementById('stat_bounce_rate').textContent = `Bounce Rate: ${campaignData.bounce_rate_on_sent}`;
+
+            document.getElementById('report_display_area').style.display = 'block';
+        }
+
+        function handleViewReport() {
+            const selectedCampaignName = document.getElementById('report_campaign_select').value;
+            const reportDisplayArea = document.getElementById('report_display_area');
+
+            if (selectedCampaignName && dummyReports[selectedCampaignName]) {
+                const campaignData = dummyReports[selectedCampaignName];
+                displayCampaignReport(campaignData);
+            } else if (selectedCampaignName === "") {
+                 reportDisplayArea.innerHTML = '<p>Please select a campaign to view its report.</p>';
+                 reportDisplayArea.style.display = 'block'; // Show message
+            } else {
+                reportDisplayArea.innerHTML = '<p>Report not found for the selected campaign.</p>';
+                reportDisplayArea.style.display = 'block'; // Show message
+            }
+        }
+    </script>
+</body>
+</html>

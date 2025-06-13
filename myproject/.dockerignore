@@ -1,0 +1,49 @@
+# Python bytecode and cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+
+# Virtual environment
+env/
+venv/
+.env/
+.venv/
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# SQLite database (if used locally and not intended for image)
+*.db
+db.sqlite3
+
+# Local development artifacts / IDE specific
+.idea/
+.vscode/
+*.log
+local_settings.py
+
+# Static HTML frontend (if served separately or not part of this image's direct responsibility)
+# frontend_html/
+# For now, let's assume frontend_html might be needed if Django is to serve it,
+# or if it's part of the overall project structure copied.
+# If it's large and definitely served by another service (e.g. Nginx), uncommenting is good.
+
+# Docker specific files (should not be in image context itself)
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Test outputs
+htmlcov/
+.coverage
+.pytest_cache/
+pytestdebug.log
+
+# OS specific
+.DS_Store
+Thumbs.db

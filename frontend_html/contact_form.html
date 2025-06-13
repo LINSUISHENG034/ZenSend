@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Form</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Contact Form</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="contacts.html">Manage Contacts</a></li>
+            </ul>
+        </nav>
+    </header>
+    <div class="container">
+        <!-- The heading will be dynamically set by JavaScript to "Add Contact" or "Edit Contact" -->
+        <h2 id="form-title">Add/Edit Contact</h2>
+        <form action="#" method="POST"> <!-- Action will be handled by JavaScript -->
+            <div>
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div>
+                <label for="first_name">First Name:</label>
+                <input type="text" id="first_name" name="first_name">
+            </div>
+            <div>
+                <label for="last_name">Last Name:</label>
+                <input type="text" id="last_name" name="last_name">
+            </div>
+            <div>
+                <label for="custom_fields">Custom Fields (JSON):</label>
+                <textarea id="custom_fields" name="custom_fields" rows="4" placeholder='Example: {"phone": "123-456-7890", "company": "Tech Inc."}'></textarea>
+                <small>Enter a valid JSON object, or leave blank.</small>
+            </div>
+            <div>
+                <button type="submit">Save Contact</button>
+            </div>
+        </form>
+        <p><a href="contacts.html">Back to Contacts List</a></p>
+    </div>
+
+    <script>
+        // Basic script to change title if editing (conceptual)
+        // In a real app, you'd get the ID from URL and fetch data
+        document.addEventListener('DOMContentLoaded', function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const contactId = urlParams.get('id');
+            const formTitle = document.getElementById('form-title');
+            if (contactId) {
+                formTitle.textContent = 'Edit Contact';
+                // Here you would typically fetch and populate the form with contact data
+                // For example:
+                // document.getElementById('email').value = "contact1@example.com";
+                // etc.
+            } else {
+                formTitle.textContent = 'Add New Contact';
+            }
+        });
+    </script>
+</body>
+</html>

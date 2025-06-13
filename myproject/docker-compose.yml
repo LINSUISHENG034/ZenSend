@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: . # Use the current directory where docker-compose.yml is located as build context
+      dockerfile: Dockerfile # Specify the Dockerfile name
+    container_name: myproject_web
+    command: python manage.py runserver 0.0.0.0:8000 # Development server
+    volumes:
+      - .:/app # Mount current directory (project root) to /app in container
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      # DJANGO_SETTINGS_MODULE is usually set by manage.py or wsgi.py based on project structure.
+      # If explicit override needed:
+      # DJANGO_SETTINGS_MODULE: myproject.settings
+      PYTHONUNBUFFERED: 1 # Already in Dockerfile, but good for explicitness
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # Add any other environment variables your Django app needs, e.g.,
+      # DJANGO_SECRET_KEY: 'your_development_secret_key_here' (override for security)
+      # DJANGO_DEBUG: 'True'
+
+  redis:
+    image: "redis:7-alpine" # Using a more specific version, alpine for size
+    container_name: myproject_redis
+    ports:
+      - "6379:6379" # Expose Redis to host for direct connection if needed during dev
+    # volumes:
+    #   - redis_data:/data # Optional: for Redis data persistence across restarts
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myproject_celery_worker
+    command: celery -A myproject worker -l info
+    volumes:
+      - .:/app # Mount code for live updates, same as web service
+    depends_on:
+      - redis
+      # - web # Often, Celery workers don't strictly depend on the web service being *up*,
+              # but they do depend on the database (via web's models) and Redis.
+              # If tasks are triggered by webhooks or other services, web might not be a direct dependency for worker startup.
+              # However, if Django models are imported at the top level of tasks.py, the Django app needs to be ready.
+              # For simplicity, let's assume Django app setup (models etc.) is needed at worker start.
+    environment:
+      PYTHONUNBUFFERED: 1
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # DJANGO_SETTINGS_MODULE: myproject.settings
+
+# Optional: Define a named volume for Redis persistence
+# volumes:
+#   redis_data:
+#     driver: local

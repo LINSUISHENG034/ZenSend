@@ -1,0 +1,6 @@
+pandas
+openpyxl
+# openai
+celery
+redis
+drf-yasg

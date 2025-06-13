@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Template Editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- TinyMCE CDN Script -->
+    <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/5/tinymce.min.js" referrerpolicy="origin"></script>
+    <script>
+      tinymce.init({
+        selector: '#emailbody',
+        height: 500,
+        menubar: 'file edit view insert format tools table help',
+        plugins: [
+          'advlist autolink lists link image charmap print preview anchor',
+          'searchreplace visualblocks code fullscreen',
+          'insertdatetime media table paste code help wordcount'
+        ],
+        toolbar: 'undo redo | formatselect | ' +
+        'bold italic backcolor | alignleft aligncenter ' +
+        'alignright alignjustify | bullist numlist outdent indent | ' +
+        'removeformat | help | table image code media | print preview fullscreen',
+        toolbar_mode: 'floating',
+        // Basic content CSS is usually TinyMCE's own, but you can add yours
+        // content_css: 'styles.css' // Be cautious with this, might conflict.
+                                  // TinyMCE default content CSS is generally good.
+        // Image upload related (placeholder for now, backend needed for actual uploads)
+        image_title: true,
+        automatic_uploads: true,
+        file_picker_types: 'image',
+        file_picker_callback: function (cb, value, meta) {
+            var input = document.createElement('input');
+            input.setAttribute('type', 'file');
+            input.setAttribute('accept', 'image/*');
+            input.onchange = function () {
+                var file = this.files[0];
+                var reader = new FileReader();
+                reader.onload = function () {
+                    // This is a placeholder for actual upload logic
+                    // For now, it uses a base64 data URL
+                    var id = 'blobid' + (new Date()).getTime();
+                    var blobCache =  tinymce.activeEditor.editorUpload.blobCache;
+                    var base64 = reader.result.split(',')[1];
+                    var blobInfo = blobCache.create(id, file, base64);
+                    blobCache.add(blobInfo);
+                    cb(blobInfo.blobUri(), { title: file.name });
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+      });
+    </script>
+    <style>
+        /* Add some spacing for the form elements */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input[type="text"], .form-group select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .button-group button {
+            margin-right: 10px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .button-group .save-btn {
+            background-color: #28a745; /* Green */
+            color: white;
+        }
+        .button-group .new-btn {
+            background-color: #007bff; /* Blue */
+            color: white;
+        }
+        .insert-variable-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .insert-variable-group label {
+            margin-right: 10px;
+            white-space: nowrap;
+        }
+        .insert-variable-group select {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .insert-variable-group button {
+            padding: 8px 15px; /* Match select padding */
+            background-color: #6c757d; /* Grey */
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .insert-variable-group button:hover {
+            background-color: #5a6268;
+        }
+
+        /* AI Assistant Modal Styles */
+        .ai-modal-overlay {
+            display: none; /* Hidden by default */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+            z-index: 1000; /* Ensure it's on top */
+            justify-content: center;
+            align-items: center;
+        }
+        .ai-modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            width: 80%;
+            max-width: 500px;
+            z-index: 1001;
+        }
+        .ai-modal-content h3 {
+            margin-top: 0;
+        }
+        .ai-modal-content textarea {
+            width: 100%;
+            min-height: 100px;
+            margin-bottom: 15px;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .ai-modal-buttons button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .ai-modal-buttons .generate-btn {
+            background-color: #28a745; /* Green */
+            color: white;
+        }
+        .ai-modal-buttons .cancel-btn {
+            background-color: #6c757d; /* Grey */
+            color: white;
+        }
+        .ai-assistant-btn {
+             background-color: #ffc107; /* Yellow */
+             color: black;
+             margin-left: 10px; /* Add some space from other buttons */
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Email Template Editor</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="contacts.html">Manage Contacts</a></li>
+                <!-- Add other relevant links as needed -->
+            </ul>
+        </nav>
+    </header>
+    <div class="container">
+
+        <div class="form-group">
+            <label for="load_template">Load Existing Template:</label>
+            <select id="load_template" name="load_template" onchange="loadSelectedTemplate()">
+                <option value="">-- Select a Template --</option>
+                <option value="welcome">Welcome Email</option>
+                <option value="newsletter">Newsletter Update</option>
+                <option value="promo">Special Promotion</option>
+            </select>
+        </div>
+
+        <hr style="margin: 20px 0;">
+
+        <h2>Create or Edit Email Template</h2>
+
+        <div class="form-group">
+            <label for="template_name">Template Name:</label>
+            <input type="text" id="template_name" name="template_name" placeholder="e.g., Monthly Newsletter">
+        </div>
+
+        <div class="form-group">
+            <label for="template_subject">Subject:</label>
+            <input type="text" id="template_subject" name="template_subject" placeholder="e.g., Our Updates for July">
+        </div>
+
+        <div class="form-group">
+            <label for="emailbody">Email Body:</label>
+            <!-- Insert Variable Section -->
+            <div class="insert-variable-group">
+                <label for="contact_variables">Insert Variable:</label>
+                <select id="contact_variables" name="contact_variables">
+                    <option value="{{email}}">Email ({{email}})</option>
+                    <option value="{{first_name}}">First Name ({{first_name}})</option>
+                    <option value="{{last_name}}">Last Name ({{last_name}})</option>
+                    <option value="{{custom_fields.company}}">Company ({{custom_fields.company}})</option>
+                    <option value="{{custom_fields.phone}}">Phone ({{custom_fields.phone}})</option>
+                    <option value="{{custom_fields.address}}">Address ({{custom_fields.address}})</option>
+                    <option value="{{custom_fields.city}}">City ({{custom_fields.city}})</option>
+                    <option value="{{custom_fields.birthday}}">Birthday ({{custom_fields.birthday}})</option>
+                </select>
+                <button type="button" onclick="insertVariable()">Insert</button>
+            </div>
+            <textarea id="emailbody"></textarea>
+        </div>
+
+        <div class="button-group" style="margin-top: 20px;">
+            <button type="button" class="save-btn" onclick="saveTemplate()">Save Template</button>
+            <button type="button" class="new-btn" onclick="createNewTemplate()">Create New Template</button>
+            <button type="button" class="ai-assistant-btn" onclick="openAIAssistant()">AI Assistant</button>
+        </div>
+    </div>
+
+    <!-- AI Assistant Modal Structure -->
+    <div id="aiAssistantModal" class="ai-modal-overlay">
+        <div class="ai-modal-content">
+            <h3>AI Assistant</h3>
+            <p>Enter your prompt below to generate email content:</p>
+            <textarea id="ai_prompt_input" placeholder="e.g., Write a follow-up email for a sales lead..."></textarea>
+            <div class="ai-modal-buttons">
+                <button type="button" class="generate-btn" onclick="callAIProxy()">Generate Content</button>
+                <button type="button" class="cancel-btn" onclick="closeAIAssistant()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Dummy templates data
+        const dummyTemplates = {
+            "welcome": {
+                name: "Welcome Email",
+                subject: "Welcome to Our Platform!",
+                body: "<p>Hi {{contact_first_name}},</p><p>Thank you for signing up. We're excited to have you!</p><p>Best,<br>The Team</p>"
+            },
+            "newsletter": {
+                name: "Newsletter Update",
+                subject: "This Month's News",
+                body: "<h1>Latest Updates</h1><p>Hello {{contact_first_name}},</p><p>Here's what's new this month...</p>"
+            },
+            "promo": {
+                name: "Special Promotion",
+                subject: "A Special Offer Just For You, {{contact_first_name}}!",
+                body: "<p>Dear {{contact_first_name}},</p><p>Don't miss out on our special promotion: <strong>Get 20% off!</strong></p>"
+            }
+        };
+
+        function loadSelectedTemplate() {
+            const selectedValue = document.getElementById('load_template').value;
+            if (selectedValue && dummyTemplates[selectedValue]) {
+                const template = dummyTemplates[selectedValue];
+                document.getElementById('template_name').value = template.name;
+                document.getElementById('template_subject').value = template.subject;
+                if (tinymce.get('emailbody')) {
+                    tinymce.get('emailbody').setContent(template.body);
+                }
+                // Optionally, set a hidden field for template ID if you were actually loading from a DB
+                // document.getElementById('template_id').value = selectedValue;
+            } else if (selectedValue === "") {
+                // If "-- Select a Template --" is chosen, clear fields (optional, or call createNewTemplate)
+                createNewTemplate();
+            }
+        }
+
+        function saveTemplate() {
+            const name = document.getElementById('template_name').value;
+            const subject = document.getElementById('template_subject').value;
+            let content = '';
+            if (tinymce.get('emailbody')) {
+                content = tinymce.get('emailbody').getContent();
+            }
+
+            // In a real application, you would send this data to the backend.
+            // For now, just log or alert.
+            const message = `Save Template button clicked.
+Name: ${name}
+Subject: ${subject}
+Body:
+${content}`;
+            console.log(message);
+            alert("Check console for data to be saved (F12 -> Console). Save functionality is not implemented with backend yet.");
+        }
+
+        function createNewTemplate() {
+            document.getElementById('template_name').value = '';
+            document.getElementById('template_subject').value = '';
+            if (tinymce.get('emailbody')) {
+                tinymce.get('emailbody').setContent('');
+            }
+            document.getElementById('load_template').value = ''; // Reset dropdown
+            // document.getElementById('template_id').value = ''; // Clear any loaded template ID
+            alert("Fields cleared for a new template.");
+        }
+
+        function insertVariable() {
+            const selectedVariable = document.getElementById('contact_variables').value;
+            if (selectedVariable && tinymce.get('emailbody')) {
+                tinymce.get('emailbody').execCommand('mceInsertContent', false, selectedVariable);
+            } else if (!tinymce.get('emailbody')) {
+                alert("TinyMCE editor not found!");
+            }
+        }
+
+        // --- AI Assistant Functions ---
+        function openAIAssistant() {
+            document.getElementById('aiAssistantModal').style.display = 'flex'; // Use flex to center content
+        }
+
+        function closeAIAssistant() {
+            document.getElementById('aiAssistantModal').style.display = 'none';
+            document.getElementById('ai_prompt_input').value = ''; // Clear prompt on close
+        }
+
+        function callAIProxy() {
+            const prompt = document.getElementById('ai_prompt_input').value;
+            let mockResponse = '';
+
+            if (!prompt.trim()) {
+                alert("Please enter a prompt for the AI assistant.");
+                return;
+            }
+
+            // Simulate API call based on prompt content
+            if (prompt.toLowerCase().includes("error_test")) {
+                alert("AI Error Simulated. (No content inserted)");
+                console.error("AI Proxy call failed: Simulated AI service error.");
+            } else if (prompt.toLowerCase().includes("timeout_test")) {
+                alert("AI Timeout Simulated. (No content inserted)");
+                console.warn("AI Proxy call timed out: Simulated AI service timeout.");
+            } else {
+                mockResponse = `\n<p><em>[AI Generated Content based on: '${prompt}']</em></p>\n<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam nec purus ut libero facilisis fermentum. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.</p>\n`;
+                if (tinymce.get('emailbody')) {
+                    tinymce.get('emailbody').execCommand('mceInsertContent', false, mockResponse);
+                    alert("Mock AI content inserted into editor.");
+                } else {
+                    alert("TinyMCE editor not found!");
+                }
+            }
+            closeAIAssistant(); // Close modal after action
+        }
+    </script>
+</body>
+</html>

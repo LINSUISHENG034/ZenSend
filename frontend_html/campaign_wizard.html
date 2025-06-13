@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Campaign Wizard</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .wizard-step {
+            display: none; /* Hidden by default, shown by JS */
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .wizard-step.active {
+            display: block;
+        }
+        .wizard-step h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .form-group { /* Re-using from email_editor for consistency if needed */
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="datetime-local"],
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .button-group { /* Re-using from email_editor */
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-between; /* For prev/next buttons */
+        }
+        .button-group button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff; /* Default blue */
+            color: white;
+        }
+        .button-group button.prev-btn {
+            background-color: #6c757d; /* Grey */
+        }
+        .button-group button.send-btn, .button-group button.schedule-btn {
+            background-color: #28a745; /* Green */
+        }
+        #email_preview_area {
+            border: 1px solid #ccc; /* Solid border for iframe container */
+            /* padding: 0; Remove padding if iframe takes full space */
+            min-height: 300px; /* Adjust as needed */
+            background-color: #fff;
+            display: flex; /* To make iframe fill it */
+            flex-direction: column;
+        }
+        #preview_iframe {
+            width: 100%;
+            height: 300px; /* Initial height, can be dynamic */
+            border: none;
+            flex-grow: 1; /* Iframe takes available space */
+        }
+        .preview-controls {
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-bottom: 1px solid #ccc;
+        }
+        .preview-controls label {
+            margin-right: 5px;
+            font-size: 0.9em;
+        }
+        .preview-controls input[type="text"] {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin-right: 10px;
+            font-size: 0.9em;
+        }
+        .preview-controls button {
+            padding: 5px 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .preview-controls button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Create New Campaign</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <!-- Add other relevant links as needed -->
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container">
+        <!-- Step 1: Campaign Setup & Recipients -->
+        <div id="step1" class="wizard-step active">
+            <h3>Step 1: Campaign Setup & Recipients</h3>
+            <div class="form-group">
+                <label for="campaign_name">Campaign Name:</label>
+                <input type="text" id="campaign_name" name="campaign_name" placeholder="e.g., Q3 Product Update">
+            </div>
+            <div class="form-group">
+                <label>Select Recipients:</label>
+                <div>
+                    <input type="radio" id="all_contacts" name="recipient_type" value="all" checked onchange="toggleSpecificContacts(false)">
+                    <label for="all_contacts">All Contacts</label>
+                </div>
+                <div>
+                    <input type="radio" id="specific_contacts_radio" name="recipient_type" value="specific" onchange="toggleSpecificContacts(true)">
+                    <label for="specific_contacts_radio">Specific Contacts</label>
+                </div>
+                <div id="specific_contacts_details" style="display:none; margin-top:10px;">
+                    <textarea id="specific_contacts_input" placeholder="Enter contact emails or IDs, one per line..."></textarea>
+                </div>
+            </div>
+            <div class="button-group">
+                <span></span> <!-- Placeholder for alignment -->
+                <button type="button" onclick="navigateToStep(2)">Next: Select Template</button>
+            </div>
+        </div>
+
+        <!-- Step 2: Select Template -->
+        <div id="step2" class="wizard-step">
+            <h3>Step 2: Select Email Template</h3>
+            <div class="form-group">
+                <label for="campaign_template_select">Choose a Template:</label>
+                <select id="campaign_template_select" name="campaign_template_select">
+                    <option value="">-- Select Template --</option>
+                    <option value="template1">Welcome Email (Dummy)</option>
+                    <option value="template2">Product Launch (Dummy)</option>
+                    <option value="template3">Monthly Newsletter (Dummy)</option>
+                </select>
+            </div>
+            <div class="button-group">
+                <button type="button" class="prev-btn" onclick="navigateToStep(1)">Previous: Campaign Setup</button>
+                <button type="button" onclick="navigateToStep(3)">Next: Preview & Send</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Preview & Send -->
+        <div id="step3" class="wizard-step">
+            <h3>Step 3: Preview & Send</h3>
+
+            <div class="form-group">
+                <label>Campaign Summary:</label>
+                <p style="font-size:0.9em; margin-left:10px;">
+                    <strong>Campaign Name:</strong> <span id="summary_campaign_name"></span><br>
+                    <strong>Recipients:</strong> <span id="summary_recipients"></span><br>
+                    <strong>Template:</strong> <span id="summary_template_name"></span>
+                </p>
+            </div>
+
+            <hr>
+
+            <div class="form-group">
+                <label>Preview Email with Sample Data:</label>
+                <div class="preview-controls">
+                    <label for="sample_first_name">First Name:</label>
+                    <input type="text" id="sample_first_name" value="John">
+                    <label for="sample_last_name">Last Name:</label>
+                    <input type="text" id="sample_last_name" value="Doe">
+                    <label for="sample_email">Email:</label>
+                    <input type="text" id="sample_email" value="john.doe@example.com">
+                    <label for="sample_company">Company:</label>
+                    <input type="text" id="sample_company" value="Innovate Corp">
+                    <button type="button" onclick="renderCampaignPreview()">Refresh Preview</button>
+                </div>
+                <div id="email_preview_area">
+                    <iframe id="preview_iframe" title="Email Preview"></iframe>
+                </div>
+                 <p style="font-size:0.9em; margin-top:5px;"><strong>Subject Preview:</strong> <span id="preview_email_subject_text">[Subject will appear here]</span></p>
+            </div>
+
+            <div class="form-group">
+                <label for="schedule_datetime">Schedule for (optional):</label>
+                <input type="datetime-local" id="schedule_datetime" name="schedule_datetime">
+            </div>
+            <div class="button-group">
+                <button type="button" class="prev-btn" onclick="navigateToStep(2)">Previous: Select Template</button>
+                <div>
+                    <button type="button" class="schedule-btn" onclick="scheduleCampaign()">Schedule Campaign</button>
+                    <button type="button" class="send-btn" onclick="sendCampaignNow()" style="margin-left:10px;">Send Campaign Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        const totalSteps = 3;
+
+        // Dummy Template Data Store
+        const dummyTemplatesStore = {
+            "template1": {
+                name: "Welcome Email (Dummy)",
+                subject: "Welcome, {{first_name}}!",
+                body_html: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                        <h2>Welcome to Our Community, {{first_name}}!</h2>
+                        <p>Hi {{first_name}} {{last_name}},</p>
+                        <p>Thanks for signing up. We're thrilled to have you as part of our community. Your registered email is {{email}}.</p>
+                        <p>If you work at <strong>{{custom_fields.company}}</strong>, you might find our enterprise solutions interesting!</p>
+                        <p>Best Regards,<br>The MyApp Team</p>
+                    </div>`
+            },
+            "template2": {
+                name: "Product Launch (Dummy)",
+                subject: "Exciting News: New Product Launch!",
+                body_html: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                        <h1>Our New Product is Here!</h1>
+                        <p>Hello {{first_name}},</p>
+                        <p>We are excited to announce the launch of our new product. We think you'll love it.</p>
+                        <p>Learn more at our website or contact us at {{email}} if you are from {{custom_fields.company}}.</p>
+                        <p>Sincerely,<br>The Product Team</p>
+                    </div>`
+            },
+            "template3": {
+                name: "Monthly Newsletter (Dummy)",
+                subject: "Your {{custom_fields.company}} Newsletter for this Month",
+                body_html: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                        <h3>Newsletter - <span id="current_month_year_placeholder"></span></h3>
+                        <p>Hi {{first_name}},</p>
+                        <p>Here's your update from {{custom_fields.company}}. We hope this email {{email}} finds you well.</p>
+                        <ul><li>News item 1</li><li>News item 2</li></ul>
+                        <p>Thanks,<br>Newsletter Team</p>
+                    </div>`
+            },
+             "": { // Fallback for "-- Select Template --"
+                name: "N/A",
+                subject: "",
+                body_html: "<p>Please select a template to preview its content.</p>"
+            }
+        };
+        let selectedTemplateContent = dummyTemplatesStore[""]; // Hold the current template's content
+
+        function showStep(stepNumber) {
+            for (let i = 1; i <= totalSteps; i++) {
+                document.getElementById('step' + i).classList.remove('active');
+            }
+            document.getElementById('step' + stepNumber).classList.add('active');
+            currentStep = stepNumber;
+        }
+
+        function navigateToStep(stepNumber) {
+            if (stepNumber < 1 || stepNumber > totalSteps) return;
+
+            // Conceptual: Add validation before proceeding if needed
+            if (currentStep === 1 && !validateStep1()) return;
+            if (currentStep === 2 && !validateStep2()) return;
+
+            showStep(stepNumber);
+
+            // If moving to Step 3, or if already on Step 3 and refreshing, update the preview.
+            if (stepNumber === 3) {
+                updateSummaryAndPassDataToPreview();
+            }
+        }
+
+        // --- Step 1 Validation (Conceptual) ---
+        function validateStep1() {
+            const campaignName = document.getElementById('campaign_name').value;
+            if (!campaignName.trim()) {
+                alert("Campaign Name is required.");
+                return false;
+            }
+            // Add more validation for recipients if needed
+            return true;
+        }
+
+        // --- Step 2 Validation (Conceptual) ---
+        function validateStep2() {
+            const templateId = document.getElementById('campaign_template_select').value;
+            if (!templateId) {
+                alert("Please select an email template.");
+                return false;
+            }
+            // Store selected template content for Step 3
+            selectedTemplateContent = dummyTemplatesStore[templateId] || dummyTemplatesStore[""];
+            return true;
+        }
+
+
+        function toggleSpecificContacts(show) {
+            document.getElementById('specific_contacts_details').style.display = show ? 'block' : 'none';
+        }
+
+        function updateSummaryAndPassDataToPreview() {
+            // Update Summary Info
+            document.getElementById('summary_campaign_name').textContent = document.getElementById('campaign_name').value || 'N/A';
+            let recipientsDisplay = 'All Contacts';
+            if (document.getElementById('specific_contacts_radio').checked) {
+                recipientsDisplay = `Specific contacts (see input)` || 'Specific: (None specified)';
+            }
+            document.getElementById('summary_recipients').textContent = recipientsDisplay;
+            const templateSelect = document.getElementById('campaign_template_select');
+            selectedTemplateContent = dummyTemplatesStore[templateSelect.value] || dummyTemplatesStore[""]; // Ensure current selection
+            document.getElementById('summary_template_name').textContent = selectedTemplateContent.name;
+
+            // Trigger the preview rendering
+            renderCampaignPreview();
+        }
+
+        function renderCampaignPreview() {
+            const sampleContact = {
+                first_name: document.getElementById('sample_first_name').value || "Sample",
+                last_name: document.getElementById('sample_last_name').value || "User",
+                email: document.getElementById('sample_email').value || "sample.user@example.com",
+                custom_fields: {
+                    company: document.getElementById('sample_company').value || "Sample Company Inc."
+                    // Add more sample custom fields if your templates use them
+                }
+            };
+
+            let subjectHtml = selectedTemplateContent.subject;
+            let bodyHtml = selectedTemplateContent.body_html;
+
+            // Basic templating logic
+            subjectHtml = subjectHtml.replace(/\{\{first_name\}\}/g, sampleContact.first_name);
+            subjectHtml = subjectHtml.replace(/\{\{last_name\}\}/g, sampleContact.last_name);
+            subjectHtml = subjectHtml.replace(/\{\{email\}\}/g, sampleContact.email);
+            subjectHtml = subjectHtml.replace(/\{\{custom_fields\.company\}\}/g, sampleContact.custom_fields.company);
+            // Add more replacements for other standard or custom fields as needed
+
+            bodyHtml = bodyHtml.replace(/\{\{first_name\}\}/g, sampleContact.first_name);
+            bodyHtml = bodyHtml.replace(/\{\{last_name\}\}/g, sampleContact.last_name);
+            bodyHtml = bodyHtml.replace(/\{\{email\}\}/g, sampleContact.email);
+            bodyHtml = bodyHtml.replace(/\{\{custom_fields\.company\}\}/g, sampleContact.custom_fields.company);
+            // Add more replacements
+
+            // Update subject preview text
+            document.getElementById('preview_email_subject_text').textContent = subjectHtml;
+
+            // Update iframe content
+            let previewFrame = document.getElementById('preview_iframe');
+            previewFrame.contentWindow.document.open();
+            previewFrame.contentWindow.document.write(bodyHtml);
+            previewFrame.contentWindow.document.close();
+        }
+
+
+        function sendCampaignNow() {
+            const campaignName = document.getElementById('campaign_name').value;
+            const recipientType = document.querySelector('input[name="recipient_type"]:checked').value;
+            const specificContacts = document.getElementById('specific_contacts_input').value;
+            const templateId = document.getElementById('campaign_template_select').value;
+
+            alert(`Sending Campaign Now (Conceptual):\nName: ${campaignName}\nRecipients: ${recipientType === 'specific' ? specificContacts : 'All Contacts'}\nTemplate ID: ${templateId}\n\nThis would normally trigger a backend API call.`);
+            // Later, this would involve an API call to the backend's 'send_now' action.
+        }
+
+        function scheduleCampaign() {
+            const campaignName = document.getElementById('campaign_name').value;
+            const recipientType = document.querySelector('input[name="recipient_type"]:checked').value;
+            const specificContacts = document.getElementById('specific_contacts_input').value;
+            const templateId = document.getElementById('campaign_template_select').value;
+            const scheduleTime = document.getElementById('schedule_datetime').value;
+
+            if (!scheduleTime) {
+                alert("Please select a date and time to schedule the campaign.");
+                return;
+            }
+            alert(`Scheduling Campaign (Conceptual):\nName: ${campaignName}\nRecipients: ${recipientType === 'specific' ? specificContacts : 'All Contacts'}\nTemplate ID: ${templateId}\nScheduled for: ${scheduleTime}\n\nThis would normally trigger a backend API call.`);
+            // Later, this would involve an API call to the backend's 'schedule_campaign' action.
+        }
+
+        // Initialize to show the first step
+        document.addEventListener('DOMContentLoaded', function() {
+            // Ensure the iframe exists before trying to render into it on first load of step 3
+            // However, navigateToStep calls updatePreview which calls renderCampaignPreview.
+            // Initial call to showStep(1) is fine.
+            showStep(1);
+        });
+    </script>
+</body>
+</html>
