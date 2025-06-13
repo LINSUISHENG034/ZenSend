@@ -45,6 +45,33 @@ You can learn more in the [Create React App documentation](https://facebook.gith
 
 To learn React, check out the [React documentation](https://reactjs.org/).
 
+## Project Overview
+
+This React application serves as the frontend for the Intelligent Personalized Email Marketing System. It communicates with a Django backend to provide a rich user interface for managing contacts, email templates, campaigns, and viewing analytics.
+
+### Key Technologies Used:
+
+*   React (with Create React App)
+*   Redux Toolkit (for state management)
+*   React Router (for navigation)
+*   Ant Design (for UI components)
+*   Axios (for API communication)
+*   Recharts (for data visualization)
+*   TinyMCE (for rich text editing)
+
+## Environment Variables
+
+To run the frontend application correctly, especially when connecting to the backend, create a `.env` file in the `frontend/` directory with the following variables:
+
+*   `REACT_APP_API_BASE_URL`: The base URL for the backend API.
+    *   Example for local development: `REACT_APP_API_BASE_URL=http://localhost:8000/api`
+*   `REACT_APP_TINYMCE_API_KEY`: Your API key for TinyMCE Cloud services (optional, but recommended to remove warnings and for premium features).
+    *   Example: `REACT_APP_TINYMCE_API_KEY=your_tinymce_api_key_here`
+
+## Development
+
+Follow the standard Create React App scripts (`npm start`, `npm test`, `npm run build`). Ensure the backend Django application is running and accessible at the URL specified in `REACT_APP_API_BASE_URL`.
+
 ### Code Splitting
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)

@@ -1,13 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
-import time # For simulating timeout
-
-# Import your OpenAI library and API key handling mechanism here
-# For example:
-# import openai
-# from django.conf import settings
-# openai.api_key = settings.OPENAI_API_KEY
+import openai
+from django.conf import settings
 
 class AIGenerateView(APIView):
     """
@@ -30,46 +25,51 @@ class AIGenerateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Placeholder for actual OpenAI API call
+        if not getattr(settings, 'OPENAI_API_KEY', None):
+            return Response(
+                {"error": "OpenAI API key is not configured."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+
         try:
-            # Simulate specific test cases based on prompt content
-            if "error_test" in prompt.lower():
-                # Simulate an internal server error from the AI service
-                return Response(
-                    {"error": "Simulated AI service error."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-
-            if "timeout_test" in prompt.lower():
-                time.sleep(5) # Simulate a delay that might lead to a timeout
-                              # Actual HTTP timeouts are usually handled by web server or client settings.
-                              # This just simulates a long processing time on the AI side.
-                return Response(
-                    {"error": "Simulated AI service timeout after 5 seconds."},
-                    status=status.HTTP_504_GATEWAY_TIMEOUT # 504 Gateway Timeout is appropriate
-                )
-
-            # Simulate a successful AI response
-            # In a real scenario, this is where you would make the call:
-            # response = openai.Completion.create(
-            # engine="text-davinci-003", # Or your preferred model
-            # prompt=prompt,
-            # max_tokens=150 # Adjust as needed
-            # )
-            # generated_text = response.choices[0].text.strip()
-
-            generated_text = f"This is AI generated content for: {prompt}"
+            # Using ChatCompletion is more current
+            response = client.chat.completions.create(
+                model=getattr(settings, 'OPENAI_MODEL_NAME', "gpt-3.5-turbo"), # Configurable model
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant for writing email content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=getattr(settings, 'OPENAI_MAX_TOKENS', 150) # Configurable max_tokens
+            )
+            generated_text = response.choices[0].message.content.strip()
 
             return Response(
                 {"generated_text": generated_text},
                 status=status.HTTP_200_OK
             )
 
+        # Specific OpenAI errors
+        except openai.APIConnectionError as e:
+            # Handle connection error here
+            print(f"OpenAI API request failed to connect: {e}")
+            return Response({"error": "Failed to connect to OpenAI API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except openai.RateLimitError as e:
+            # Handle rate limit error
+            print(f"OpenAI API request exceeded rate limit: {e}")
+            return Response({"error": "Rate limit exceeded. Please try again later."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        except openai.AuthenticationError as e:
+            # Handle authentication error
+            print(f"OpenAI API authentication failed: {e}")
+            return Response({"error": "OpenAI API authentication failed. Check your API key."}, status=status.HTTP_401_UNAUTHORIZED)
+        except openai.APIStatusError as e: # General catch-all for other API errors
+            print(f"OpenAI API returned an API Status Error: {e}")
+            return Response({"error": f"OpenAI API error: {e.status_code} {e.message}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
-            # Catch any other unexpected errors during the (simulated) AI call
-            # Log the error e for debugging
-            print(f"Unexpected error in AIGenerateView: {str(e)}")
+            # Catch any other unexpected errors
+            print(f"An unexpected error occurred while calling OpenAI API: {str(e)}")
             return Response(
-                {"error": "An unexpected error occurred while processing your request."},
+                {"error": "An unexpected error occurred while processing your request with AI service."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

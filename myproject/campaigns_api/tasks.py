@@ -3,9 +3,11 @@ from django.apps import apps
 import time
 from django.utils import timezone
 # from django.core.mail import send_mail
-# from django.conf import settings
+from django.conf import settings
 from django.template import Template, Context # For Django templating
 from .models import CampaignAnalytics # Import CampaignAnalytics model
+import boto3
+from botocore.exceptions import ClientError
 
 @shared_task(bind=True, name='send_campaign_task')
 def send_campaign_task(self, campaign_id):
@@ -78,6 +80,14 @@ def send_campaign_task(self, campaign_id):
         successful_sends = 0
         failed_sends = 0
 
+        ses_client = boto3.client(
+            'ses',
+            region_name=settings.AWS_SES_REGION_NAME,
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+        )
+        source_email = settings.DEFAULT_FROM_EMAIL # Or a campaign-specific from email if available
+
         for contact in recipients:
             try:
                 # Ensure custom_fields is a dict, even if null/None from DB
@@ -97,45 +107,66 @@ def send_campaign_task(self, campaign_id):
                 html_content = django_template.render(context)
                 subject_content = subject_template.render(context).strip() # Remove leading/trailing whitespace/newlines
 
-                # MOCK EMAIL SENDING:
-                print(f"Mock Sending Email to: {contact.email} for Campaign ID: {campaign.id}")
-                print(f"Owner: {campaign.owner.username}")
-                print(f"Subject: {subject_content}")
-                # print(f"Rendered Body (first 100 chars): {html_content[:100]}...") # Keep log concise
+                try:
+                    response = ses_client.send_email(
+                        Source=source_email,
+                        Destination={'ToAddresses': [contact.email]},
+                        Message={
+                            'Subject': {'Data': subject_content, 'Charset': 'UTF-8'},
+                            'Body': {
+                                'Html': {'Data': html_content, 'Charset': 'UTF-8'},
+                                # Optionally, add a Text part:
+                                # 'Text': {'Data': text_content, 'Charset': 'UTF-8'}
+                            }
+                        }
+                        # Optionally, add ConfigurationSetName if using SES Configuration Sets
+                        # ConfigurationSetName='your-config-set-name'
+                    )
+                    ses_message_id = response['MessageId']
+                    # Create CampaignAnalytics record for 'sent'
+                    CampaignAnalytics.objects.create(
+                        campaign=campaign,
+                        contact=contact,
+                        ses_message_id=ses_message_id,
+                        event_type='sent',
+                        event_timestamp=timezone.now(),
+                        details={'info': 'Email sent via AWS SES.', 'subject': subject_content, 'ses_response': response}
+                    )
+                    successful_sends += 1
+                    print(f"Successfully sent email to {contact.email} for campaign {campaign.id} via SES. Message ID: {ses_message_id}")
 
-                # Placeholder for actual email sending:
-                # send_mail(
-                #     subject_content,
-                #     "", # Plain text version - could be generated or omitted
-                #     settings.DEFAULT_FROM_EMAIL, # From email
-                #     [contact.email], # To email
-                #     html_message=html_content
-                # )
+                except ClientError as e:
+                    error_message = e.response.get('Error', {}).get('Message', str(e))
+                    error_code = e.response.get('Error', {}).get('Code', 'UnknownError')
+                    print(f"Failed to send email to {contact.email} via SES: {error_code} - {error_message}")
+                    # Log SES failure specifically
+                    CampaignAnalytics.objects.create(
+                        campaign=campaign,
+                        contact=contact,
+                        event_type='failed_to_send_ses', # More specific error type
+                        event_timestamp=timezone.now(),
+                        details={'error': error_message, 'error_code': error_code, 'subject': subject_content}
+                    )
+                    failed_sends += 1
+                except Exception as e: # Catch other unexpected errors during SES call or analytics creation
+                    print(f"General error sending to {contact.email} or logging analytics: {str(e)}")
+                    # Log internal failure before SES or if analytics creation failed post-send
+                    CampaignAnalytics.objects.create(
+                        campaign=campaign,
+                        contact=contact,
+                        event_type='failed_to_send', # General pre-SES or post-SES failure
+                        event_timestamp=timezone.now(),
+                        details={'error': str(e), 'subject': subject_content}
+                    )
+                    failed_sends += 1
 
-                # MOCK SES Message ID - in a real scenario, this comes from SES response
-                mock_ses_message_id = f"mock_ses_{campaign.id}_{contact.id}_{int(time.time())}"
-
+            except Exception as e: # This outer exception block now primarily catches template rendering errors
+                print(f"Failed to process or send to {contact.email} for campaign {campaign_id}: {str(e)}")
+                # Log internal failure (e.g. template rendering)
                 CampaignAnalytics.objects.create(
                     campaign=campaign,
-                    contact=contact,
-                    ses_message_id=mock_ses_message_id,
-                    event_type='sent', # This is our internal 'sent to SES' event
-                    event_timestamp=timezone.now(), # Timestamp of this event
-                    details={'info': 'Email processed by Celery task and mock sent to SES.', 'subject': subject_content}
-                )
-                print(f"Mock sent email to {contact.email} for campaign {campaign_id} with mock_ses_message_id: {mock_ses_message_id}")
-                successful_sends += 1
-
-                # In a real scenario, add a small delay or use batching if send_mail is synchronous
-                # time.sleep(0.05) # 50ms per email, 20 emails/sec
-
-            except Exception as e:
-                print(f"Failed to process or mock send to {contact.email} for campaign {campaign_id}: {str(e)}")
-                # Log internal failure before SES
-                CampaignAnalytics.objects.create(
-                    campaign=campaign,
-                    contact=contact,
-                    event_type='failed_to_send',
+                    contact=contact, # contact might not be defined if error is before loop
+                    event_type='failed_to_send', # General pre-SES failure
                     event_timestamp=timezone.now(),
                     details={'error': str(e), 'subject': subject_content if 'subject_content' in locals() else 'N/A'}
                 )
