@@ -23,11 +23,36 @@ This setup is suitable for local testing and development, utilizing Docker to or
     ```
 
 2.  **Environment Variables:**
-    *   The application uses environment variables for key configurations, primarily for Celery URLs, which are set in `docker-compose.yml`. These point the Django application and Celery workers to the `redis` service defined in the same Docker Compose file.
-    *   **Important for Future Enhancements (Real Services):** If you integrate actual AWS SES or OpenAI services, you will need to manage API keys and sensitive credentials securely. **Do NOT hardcode these into your source code or `docker-compose.yml` directly for production.**
-        *   For AWS SES: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION_NAME`, `AWS_SES_FROM_EMAIL`.
-        *   For OpenAI: `OPENAI_API_KEY`.
-    *   These would typically be added to the `environment` section of the `web` and `celery_worker` services in `docker-compose.yml` for local Docker development, or managed via your deployment platform's secret management tools for production. The Django `settings.py` would then read these using `os.environ.get()`. (This guide notes them; actual implementation of reading all these specific keys is beyond the current MVP's direct use of these services).
+    *   The application relies on environment variables for crucial configurations. These are essential for both local Docker-based development and production deployments. For local Docker development, you can add these to the `environment` section of the relevant services in `docker-compose.yml` or use an `.env` file referenced by Docker Compose. For production, these should be managed via your deployment platform's secret management tools.
+    *   The Django `settings.py` is configured to read these variables using `os.environ.get()`. The following variables are expected for V1.1 functionality:
+
+    *   **Django Core:**
+        *   `SECRET_KEY`: Django's secret key. **Required for production.**
+        *   `DEBUG`: Set to `False` for production, `True` for development.
+        *   `ALLOWED_HOSTS`: Comma-separated list of allowed hostnames for production (e.g., `yourdomain.com,www.yourdomain.com`).
+    *   **Database:** (Assuming default SQLite for local Docker, but for production these would be needed)
+        *   `DB_ENGINE` (e.g., `django.db.backends.postgresql`)
+        *   `DB_NAME`
+        *   `DB_USER`
+        *   `DB_PASSWORD`
+        *   `DB_HOST`
+        *   `DB_PORT`
+    *   **CORS:**
+        *   `CORS_ALLOWED_ORIGINS`: Comma-separated list of frontend origins allowed to make requests (e.g., `http://localhost:3001,https://yourfrontenddomain.com`). Or `CORS_ALLOW_ALL_ORIGINS=True` for local development (less secure).
+    *   **Celery:**
+        *   `CELERY_BROKER_URL`: URL for the Celery message broker (e.g., `redis://redis:6379/0`).
+        *   `CELERY_RESULT_BACKEND`: URL for the Celery result backend (e.g., `redis://redis:6379/0`).
+    *   **OpenAI API:**
+        *   `OPENAI_API_KEY`: Your API key for OpenAI. **Required for AI features.**
+        *   `OPENAI_MODEL_NAME`: (Optional) The OpenAI model to use (e.g., `gpt-3.5-turbo`). Defaults to `gpt-3.5-turbo` in the code if not set.
+        *   `OPENAI_MAX_TOKENS`: (Optional) Max tokens for AI generation. Defaults to `150` in the code if not set.
+    *   **AWS SES:**
+        *   `AWS_ACCESS_KEY_ID`: Your AWS Access Key ID. **Required for email sending.**
+        *   `AWS_SECRET_ACCESS_KEY`: Your AWS Secret Access Key. **Required for email sending.**
+        *   `AWS_SES_REGION_NAME`: The AWS region where your SES service is configured (e.g., `us-east-1`). **Required for email sending.**
+        *   `DEFAULT_FROM_EMAIL`: The verified email address to send emails from via SES. **Required for email sending.**
+    *   **AWS SNS Webhook Security:**
+        *   `ALLOWED_SNS_TOPIC_ARN`: (Optional, but highly recommended for security) The specific SNS Topic ARN that this webhook should process messages from.
 
 3.  **Build and Run with Docker Compose:**
     From the directory containing `docker-compose.yml` (`myproject/`):
@@ -74,10 +99,20 @@ This MVP's Docker setup uses Django's development server and SQLite (by default,
     *   Set `DEBUG = False` in `settings.py`.
     *   Securely manage `SECRET_KEY` (e.g., via environment variables or secrets management).
     *   Configure `ALLOWED_HOSTS` in `settings.py`.
+    *   Ensure the `cryptography` Python library is installed, as it's used for secure verification of AWS SNS webhook signatures.
 *   **Scalability & Reliability:** For scaling and high availability, deploy your application services on platforms like Kubernetes, AWS ECS, Google Cloud Run, Azure App Service, or Heroku.
 *   **Monitoring & Logging:** Implement comprehensive logging, monitoring, and alerting for your application and infrastructure.
-*   **SES Webhook Security:** For a production SES webhook, ensure it's properly secured. This includes validating the SNS message signature (if using SNS) and ensuring the endpoint is robust against abuse.
+*   **SES Webhook Security:** For a production SES webhook, ensure it's properly secured. This includes validating the SNS message signature (if using SNS) and ensuring the endpoint is robust against abuse. The `ALLOWED_SNS_TOPIC_ARN` environment variable should be set.
 *   **Celery in Production:** Consider Celery Beat for scheduled tasks if needed, Flower for monitoring Celery, and more robust worker configurations.
+
+### Frontend Deployment Note:
+
+The React frontend (in the `/frontend` directory) needs to be built into static assets for deployment.
+```bash
+cd frontend
+npm run build
+```
+These static files (in `frontend/build`) can then be served by a web server like Nginx, or deployed to a static hosting service (e.g., Vercel, Netlify, AWS S3/CloudFront). Ensure your backend's CORS configuration allows requests from the domain where the frontend is hosted.
 
 ## Stopping the Application (Local Docker Compose)
 

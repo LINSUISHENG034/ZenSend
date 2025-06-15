@@ -16,24 +16,26 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
 schema_view = get_schema_view(
-   openapi.Info(
-      title="Intelligent Personalized Email Marketing API",
-      default_version='v1.0',
-      description="API documentation for the Email Marketing System MVP",
-      # terms_of_service="https://www.example.com/policies/terms/", # Optional
-      # contact=openapi.Contact(email="contact@example.com"), # Optional
-      # license=openapi.License(name="BSD License"), # Optional
-   ),
-   public=True, # Set to False if you want to restrict access to logged-in users
-   permission_classes=(permissions.AllowAny,), # Or permissions.IsAuthenticated for restricted access
+    openapi.Info(
+        title="Intelligent Personalized Email Marketing API",
+        default_version='v1.0',
+        description="API documentation for the Email Marketing System MVP",
+        # terms_of_service="https://www.example.com/policies/terms/", # Optional
+        # contact=openapi.Contact(email="contact@example.com"), # Optional
+        # license=openapi.License(name="BSD License"), # Optional
+        ),
+    public=True, # Set to False if you want to restrict access to logged-in users
+    permission_classes=(permissions.AllowAny,), # Or permissions.IsAuthenticated for restricted access
 )
 
 urlpatterns = [
+    path('', RedirectView.as_view(url='/swagger/', permanent=True)),
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
 

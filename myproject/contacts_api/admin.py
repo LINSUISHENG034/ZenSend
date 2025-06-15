@@ -3,14 +3,14 @@ from .models import Contact
 
 @admin.register(Contact)
 class ContactAdmin(admin.ModelAdmin):
-    list_display = ('email', 'first_name', 'last_name', 'owner', 'created_at')
-    list_filter = ('owner', 'created_at')
+    list_display = ('email', 'first_name', 'last_name', 'allow_email', 'owner', 'created_at')
+    list_filter = ('owner', 'allow_email', 'created_at')
     search_fields = ('email', 'first_name', 'last_name', 'owner__username')
     readonly_fields = ('created_at',) # 'owner' could also be here if set automatically
 
     fieldsets = (
         (None, {
-            'fields': ('owner', 'email', 'first_name', 'last_name')
+            'fields': ('owner', 'email', 'first_name', 'last_name', 'allow_email')
         }),
         ('Additional Information', {
             'fields': ('custom_fields',),

@@ -11,6 +11,7 @@ class Contact(models.Model):
     # consider using TextField with json.dumps/loads or a third-party package.
     # However, modern Django with PostgreSQL or newer SQLite/MySQL versions supports JSONField directly.
     custom_fields = models.JSONField(blank=True, null=True)
+    allow_email = models.BooleanField(default=True, help_text="Whether this contact allows receiving emails")
     created_at = models.DateTimeField(auto_now_add=True)
     # updated_at = models.DateTimeField(auto_now=True) # Optional: if you want to track updates
 

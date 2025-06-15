@@ -5,6 +5,18 @@ from rest_framework.response import Response
 import json # For parsing request body if it's raw JSON
 import logging # For logging webhook requests
 from django.utils import timezone
+from django.conf import settings
+import requests
+import base64
+from urllib.parse import urlparse
+# Imports for cryptography based RSA signature verification
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidSignature
+import binascii # For base64 decoding error handling
+
 from .models import Campaign, CampaignAnalytics # Import CampaignAnalytics
 from contacts_api.models import Contact # Import Contact model
 from .serializers import CampaignSerializer
@@ -247,48 +259,188 @@ class SESWebhookView(APIView):
     2. Receiving event data (bounce, complaint, delivery, open, click).
     """
     permission_classes = [permissions.AllowAny] # Webhook must be publicly accessible
+    _cert_cache = {} # Simple in-memory cache for certificates
 
-    def post(self, request, *args, **kwargs):
-        # Log raw request headers and body for debugging, especially for initial setup
-        # logger.debug(f"SES Webhook Headers: {request.headers}")
-        # logger.debug(f"SES Webhook Body (raw): {request.body.decode('utf-8')}")
+    def _build_canonical_message(self, payload):
+        """
+        Builds the canonical message string for SNS signature verification.
+        Order of keys and inclusion of fields depends on the message type.
+        """
+        message_type = payload.get('Type')
+        if not message_type:
+            logger.error("SNS Webhook: 'Type' missing in payload for canonical message construction.")
+            return None
+
+        fields_to_sign = []
+        if message_type == 'Notification':
+            # Order for Notification: Message, MessageId, Subject (if present), Timestamp, TopicArn, Type
+            keys_in_order = ['Message', 'MessageId', 'Subject', 'Timestamp', 'TopicArn', 'Type']
+        elif message_type in ['SubscriptionConfirmation', 'UnsubscribeConfirmation']:
+            # Order for SubscriptionConfirmation/UnsubscribeConfirmation:
+            # Message, MessageId, SubscribeURL, Timestamp, Token, TopicArn, Type
+            keys_in_order = ['Message', 'MessageId', 'SubscribeURL', 'Timestamp', 'Token', 'TopicArn', 'Type']
+        else:
+            logger.error(f"SNS Webhook: Unknown message type '{message_type}' for canonical message construction.")
+            return None
+
+        canonical_parts = []
+        for key in keys_in_order:
+            if key in payload and payload[key] is not None:
+                if key == 'Subject' and message_type != 'Notification': # Subject only for Notification
+                    continue
+                canonical_parts.append(f"{key}\n{payload[key]}\n")
+            elif key not in ['Subject', 'Token']: # These fields can be optional
+                logger.warning(f"SNS Webhook: Key '{key}' missing in payload for canonical message construction of type '{message_type}'.")
+                # Depending on strictness, might return None here if a required key is missing.
+                # For now, we allow optional fields like Subject or Token to be missing.
+                # If a truly required field (e.g. MessageId, TopicArn) is missing, SNS likely wouldn't send it or it's malformed.
+
+        return "".join(canonical_parts)
+
+    def _verify_sns_message_signature(self, payload):
+        cert_url = payload.get('SigningCertURL')
+        if not cert_url:
+            logger.error("SNS Webhook: No SigningCertURL in payload.")
+            return False
+
+        parsed_url = urlparse(cert_url)
+        # Validate domain and path more strictly
+        if not (parsed_url.scheme == 'https' and
+                parsed_url.hostname.endswith('.amazonaws.com') and
+                # Example: sns.us-west-2.amazonaws.com or sns-regional.amazonaws.com
+                # Ensure it's a valid SNS domain pattern. A simple check for .amazonaws.com and .pem is a start.
+                # More specific regex could be used: r"sns\.[a-zA-Z0-9\-]+\.amazonaws\.com(\.cn)?"
+                # For now, keeping it simple:
+                parsed_url.hostname.startswith('sns.') and
+                parsed_url.path.endswith('.pem')):
+            logger.error(f"SNS Webhook: Invalid SigningCertURL: {cert_url}")
+            return False
+
+        topic_arn = payload.get('TopicArn')
+        allowed_topic_arn = getattr(settings, 'ALLOWED_SNS_TOPIC_ARN', None)
+        if allowed_topic_arn and topic_arn != allowed_topic_arn:
+            logger.error(f"SNS Webhook: Message from unexpected TopicArn '{topic_arn}'. Expected '{allowed_topic_arn}'.")
+            return False
 
         try:
-            # SES typically sends JSON. If Content-Type is text/plain for SNS, body needs parsing.
-            # For direct SES notifications via HTTPS, it's usually JSON.
-            if request.content_type == 'application/json':
-                payload = request.data
-            elif request.content_type in ['text/plain', 'text/json']: # SNS might send as text/plain
-                try:
-                    payload = json.loads(request.body.decode('utf-8'))
-                except json.JSONDecodeError:
-                    logger.error("SES Webhook: Invalid JSON in request body.")
-                    return Response({"error": "Invalid JSON format."}, status=status.HTTP_400_BAD_REQUEST)
+            if cert_url in self._cert_cache:
+                cert_pem = self._cert_cache[cert_url]
+                logger.debug(f"SNS Webhook: Using cached certificate for {cert_url}")
             else:
-                logger.warning(f"SES Webhook: Received unexpected Content-Type: {request.content_type}")
-                # Attempt to parse as JSON anyway, or handle as an error
+                logger.debug(f"SNS Webhook: Fetching certificate from {cert_url}")
+                response = requests.get(cert_url, timeout=5)
+                response.raise_for_status()
+                cert_pem = response.text
+                self._cert_cache[cert_url] = cert_pem
+
+            # Load the PEM certificate
+            cert = x509.load_pem_x509_certificate(cert_pem.encode('utf-8'), default_backend())
+
+            # Get the public key from the certificate
+            public_key = cert.public_key()
+
+            # Construct the canonical message
+            canonical_message = self._build_canonical_message(payload)
+            if canonical_message is None: # If _build_canonical_message returned None due to missing fields
+                logger.error("SNS Webhook: Failed to build canonical message for signature verification.")
+                return False
+
+            # Decode the Base64-encoded signature
+            signature_base64 = payload.get('Signature')
+            if not signature_base64:
+                logger.error("SNS Webhook: No Signature in payload.")
+                return False
+            try:
+                signature_decoded = base64.b64decode(signature_base64)
+            except binascii.Error as e: # More specific exception for base64 decoding
+                logger.error(f"SNS Webhook: Failed to Base64 decode signature: {str(e)}")
+                return False
+
+            # Verify the signature
+            signature_verified = False
+            algorithms_to_try = [
+                (hashes.SHA256(), "SHA256withRSA"), # Try SHA256 first as it's more secure
+                (hashes.SHA1(), "SHA1withRSA")      # Fallback to SHA1
+            ]
+
+            for hash_algorithm, algo_name in algorithms_to_try:
                 try:
-                    payload = json.loads(request.body.decode('utf-8'))
-                except Exception: # Broad exception for unexpected formats
-                    return Response({"error": f"Unsupported Content-Type: {request.content_type}"}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+                    public_key.verify(
+                        signature_decoded,
+                        canonical_message.encode('utf-8'),
+                        padding.PKCS1v15(),
+                        hash_algorithm
+                    )
+                    signature_verified = True
+                    logger.info(f"SNS Webhook: Signature verified successfully using {algo_name}.")
+                    break # Exit loop on successful verification
+                except InvalidSignature:
+                    logger.warning(f"SNS Webhook: {algo_name} signature verification failed.")
+                except Exception as e: # Other crypto-related errors
+                    logger.error(f"SNS Webhook: Unexpected error during {algo_name} signature verification: {str(e)}")
+                    # Depending on the error, might want to stop or try next algo. For now, continue.
+
+            if not signature_verified:
+                logger.error("SNS Webhook: Signature verification failed for all attempted algorithms.")
+            return signature_verified
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"SNS Webhook: Failed to fetch SigningCertURL {cert_url}: {str(e)}")
+            return False
+        except ValueError as e: # Catches errors from load_pem_x509_certificate if cert is malformed
+            logger.error(f"SNS Webhook: Failed to load certificate from {cert_url}: {str(e)}")
+            return False
+        except Exception as e:
+            logger.error(f"SNS Webhook: Unexpected error during signature verification process: {str(e)}")
+            return False
 
 
-            message_type = payload.get('Type')
+    def post(self, request, *args, **kwargs):
+        try:
+            # SNS usually sends JSON as text/plain, so we decode and parse.
+            payload = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.error("SES Webhook: Invalid JSON in request body.")
+            return Response({"error": "Invalid JSON format."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e: # Catch other potential errors during body decoding
+            logger.error(f"SES Webhook: Error decoding request body: {str(e)}")
+            return Response({"error": "Error decoding request body."}, status=status.HTTP_400_BAD_REQUEST)
 
-            if message_type == 'SubscriptionConfirmation':
-                # Placeholder for SNS Subscription Confirmation
-                # In a real scenario, you must visit the `SubscribeURL` from the payload
-                # or use an AWS SDK to confirm the subscription.
-                subscribe_url = payload.get('SubscribeURL')
-                logger.info(f"SES Webhook: Received SNS SubscriptionConfirmation. SubscribeURL: {subscribe_url}")
-                # For MVP/testing: Acknowledge receipt. DO NOT do this in production without validating the URL.
-                # Consider fetching the URL to confirm, or log it for manual confirmation.
-                # requests.get(subscribe_url) # Example of confirming (ensure server can make outbound requests)
-                print(f"SNS Subscription Confirmation URL (manual visit required for now): {subscribe_url}")
-                return Response({'message': 'SNS SubscriptionConfirmation received. Please confirm subscription via SubscribeURL.'}, status=status.HTTP_200_OK)
+        # Log raw payload after successful parsing for debugging if needed
+        # logger.debug(f"SES Webhook Payload (parsed): {payload}")
 
-            elif message_type == 'Notification':
-                # This is an actual event notification (bounce, delivery, etc.)
+        # Verify SNS message signature
+        if not self._verify_sns_message_signature(payload):
+            logger.error("SES Webhook: SNS message signature verification failed. Rejecting request.")
+            return Response({"error": "SNS signature verification failed. Message rejected."}, status=status.HTTP_403_FORBIDDEN) # 403 Forbidden is appropriate
+
+        logger.info("SES Webhook: SNS message signature verified successfully.")
+        message_type = payload.get('Type')
+
+        if message_type == 'SubscriptionConfirmation':
+            subscribe_url = payload.get('SubscribeURL')
+            if not subscribe_url:
+                logger.error("SNS Webhook: No SubscribeURL in SubscriptionConfirmation.")
+                return Response({"error": "No SubscribeURL found."}, status=status.HTTP_400_BAD_REQUEST)
+
+            parsed_subscribe_url = urlparse(subscribe_url)
+            if not (parsed_subscribe_url.scheme == 'https' and parsed_subscribe_url.hostname.endswith('.amazonaws.com')):
+                logger.error(f"SNS Webhook: Invalid SubscribeURL domain: {subscribe_url}")
+                return Response({"error": "Invalid SubscribeURL domain."}, status=status.HTTP_400_BAD_REQUEST)
+
+            logger.info(f"SES Webhook: Received SNS SubscriptionConfirmation. Attempting to confirm: {subscribe_url}")
+            try:
+                response = requests.get(subscribe_url, timeout=10) # Increased timeout slightly
+                response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+                logger.info(f"SNS Subscription successfully confirmed. Status: {response.status_code}, Content: {response.text[:200]}")
+                return Response({'message': 'SNS SubscriptionConfirmation received and confirmed.'}, status=status.HTTP_200_OK)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"SNS Subscription confirmation failed for {subscribe_url}: {str(e)}")
+                # Return 500 as it's an issue on our side (failing to confirm) or AWS side.
+                return Response({'message': f'SNS SubscriptionConfirmation received but confirmation request failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        elif message_type == 'Notification':
+            # This is an actual event notification (bounce, delivery, etc.)
                 # The actual event data is typically in a JSON string within payload['Message']
                 try:
                     message_data_str = payload.get('Message', '{}')
@@ -315,20 +467,21 @@ class SESWebhookView(APIView):
 
                 return Response({'message': 'SNS Notification received and processed.'}, status=status.HTTP_200_OK)
 
-            else:
-                # This might be a direct SES event (not via SNS) or an unknown type
-                # Direct SES events (e.g. via Configuration Set -> HTTPS endpoint) have a different structure
-                # and don't use the SNS 'Type' or 'Message' fields in the same way.
-                # For this MVP, we'll assume SNS notifications as they are common.
-                # If direct HTTPS, the payload itself is the event data.
-                logger.warning(f"SES Webhook: Received unknown message type or direct SES event: {payload}")
-                # Log the payload for now. Processing will be in Task 4.2.
-                # process_direct_ses_event.delay(payload)
+        else:
+            # This might be a direct SES event (not via SNS) or an unknown type
+            # Direct SES events (e.g. via Configuration Set -> HTTPS endpoint) have a different structure
+            # and don't use the SNS 'Type' or 'Message' fields in the same way.
+            # For this MVP, we'll assume SNS notifications as they are common.
+            # If direct HTTPS, the payload itself is the event data.
+            logger.warning(f"SES Webhook: Received unknown message type or direct SES event: {payload}")
+            # Log the payload for now. Processing will be in Task 4.2.
+            # process_direct_ses_event.delay(payload)
+            try:
                 return Response({'message': 'Payload received and logged (type unknown or direct SES event).'}, status=status.HTTP_200_OK)
 
-        except Exception as e:
-            logger.error(f"SES Webhook: Unhandled error: {str(e)}")
-            return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                logger.error(f"SES Webhook: Unhandled error: {str(e)}")
+                return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def process_ses_event(self, event_data):
         """
@@ -410,7 +563,7 @@ class SESWebhookView(APIView):
                 event_type=internal_event_type, # This makes a new record for each event type
                 defaults={
                     'event_timestamp': event_time,
-                    'details': event_details
+                    'details': event_data # Store the full event_data from SES
                 }
             )
 
@@ -420,12 +573,25 @@ class SESWebhookView(APIView):
                 logger.info(f"SES Event Processing: Updated existing CampaignAnalytics record for event '{internal_event_type}', campaign '{campaign_obj.id}', contact '{contact_obj.id}'.")
 
             # Further actions based on event type (e.g., update contact's bounce status)
-            # if internal_event_type == 'bounced':
-            #     contact_obj.is_bounced = True # Assuming Contact model has such a field
-            #     contact_obj.save(update_fields=['is_bounced'])
-            # if internal_event_type == 'complaint':
-            #      contact_obj.has_complained = True
-            #      contact_obj.save(update_fields=['has_complained'])
+            if internal_event_type in ['bounced', 'complaint']:
+                # Assuming Contact model has a field like `allow_email` (boolean) or `email_status` (char/int)
+                # For this example, let's assume `allow_email` and set it to False.
+                # This is a generic way to handle it. Specific fields like `is_bounced` or `has_complained`
+                # could also be used if they exist on the Contact model.
+                if hasattr(contact_obj, 'allow_email'):
+                    contact_obj.allow_email = False
+                    contact_obj.save(update_fields=['allow_email'])
+                    logger.info(f"Contact {contact_obj.id} marked as allow_email=False due to {internal_event_type} event.")
+                # else:
+                #     logger.warning(f"Contact model does not have 'allow_email' field. Cannot update for {internal_event_type}.")
+
+                # If you have specific fields:
+                # if internal_event_type == 'bounced' and hasattr(contact_obj, 'is_bounced'):
+                #     contact_obj.is_bounced = True
+                #     contact_obj.save(update_fields=['is_bounced'])
+                # if internal_event_type == 'complaint' and hasattr(contact_obj, 'has_complained'):
+                #      contact_obj.has_complained = True
+                #      contact_obj.save(update_fields=['has_complained'])
 
 
         except Exception as e:
