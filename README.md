@@ -20,7 +20,73 @@ This project is an intelligent email marketing system designed to help users cre
 
 ## Getting Started
 
-1.  **Backend:** Follow the instructions in `myproject/DEPLOYMENT_GUIDE.md` to set up and run the Django backend services using Docker.
-2.  **Frontend:** Follow the instructions in `frontend/README.md` to set up and run the React frontend application.
+### Quick Start (Recommended)
 
-Ensure all required environment variables (for both backend and frontend) are configured as specified in their respective documentation.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/LINSUISHENG034/ZenSend.git
+   cd ZenSend
+   ```
+
+2. **Backend Setup**
+   ```bash
+   cd myproject
+
+   # Create virtual environment
+   python -m venv zendev
+   source zendev/bin/activate  # On Windows: zendev\Scripts\activate
+
+   # Install dependencies
+   pip install -r requirements.txt
+
+   # Set up environment variables
+   cp .env.example .env
+   # Edit .env with your configuration
+
+   # Run migrations
+   python manage.py migrate
+
+   # Create demo data
+   python manage.py setup_demo_data
+
+   # Start Redis (required for Celery)
+   docker run -d --name redis-server -p 6379:6379 redis:7-alpine
+
+   # Start Django server
+   python manage.py runserver 127.0.0.1:9999
+   ```
+
+3. **Test Core Functionality**
+   ```bash
+   # Test the email campaign system
+   python tests/test_campaign_functionality.py
+
+   # Run demo campaign creation
+   python tests/demo_campaign_creation.py
+   ```
+
+4. **Frontend Setup** (Optional - requires Node.js 18+)
+   ```bash
+   cd frontend
+   cp .env.example .env
+   # Edit .env with your configuration
+   npm install
+   npm start
+   ```
+
+### Access Points
+
+- **API Documentation**: http://127.0.0.1:9999/swagger/
+- **Admin Interface**: http://127.0.0.1:9999/admin/
+- **Frontend** (if running): http://localhost:3000
+
+### Environment Configuration
+
+Copy the example environment files and configure them:
+- Backend: `myproject/.env.example` → `myproject/.env`
+- Frontend: `frontend/.env.example` → `frontend/.env`
+
+For detailed setup instructions, see:
+- **Backend:** `myproject/DEPLOYMENT_GUIDE.md`
+- **Frontend:** `frontend/README.md`
+- **Testing:** `myproject/tests/README.md`

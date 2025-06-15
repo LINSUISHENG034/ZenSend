@@ -80,12 +80,17 @@ def send_campaign_task(self, campaign_id):
         successful_sends = 0
         failed_sends = 0
 
-        ses_client = boto3.client(
-            'ses',
-            region_name=settings.AWS_SES_REGION_NAME,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
-        )
+        # Check if we should use mock SES for testing
+        use_mock_ses = getattr(settings, 'USE_MOCK_SES', False)
+
+        if not use_mock_ses:
+            ses_client = boto3.client(
+                'ses',
+                region_name=settings.AWS_SES_REGION_NAME,
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+            )
+
         source_email = settings.DEFAULT_FROM_EMAIL # Or a campaign-specific from email if available
 
         for contact in recipients:
@@ -108,20 +113,28 @@ def send_campaign_task(self, campaign_id):
                 subject_content = subject_template.render(context).strip() # Remove leading/trailing whitespace/newlines
 
                 try:
-                    response = ses_client.send_email(
-                        Source=source_email,
-                        Destination={'ToAddresses': [contact.email]},
-                        Message={
-                            'Subject': {'Data': subject_content, 'Charset': 'UTF-8'},
-                            'Body': {
-                                'Html': {'Data': html_content, 'Charset': 'UTF-8'},
-                                # Optionally, add a Text part:
-                                # 'Text': {'Data': text_content, 'Charset': 'UTF-8'}
+                    if use_mock_ses:
+                        # Mock SES response for testing
+                        import uuid
+                        response = {'MessageId': f'mock-ses-id-{uuid.uuid4().hex[:8]}'}
+                        print(f"[MOCK SES] Would send email to {contact.email}")
+                        print(f"[MOCK SES] Subject: {subject_content}")
+                        print(f"[MOCK SES] Body preview: {html_content[:100]}...")
+                    else:
+                        response = ses_client.send_email(
+                            Source=source_email,
+                            Destination={'ToAddresses': [contact.email]},
+                            Message={
+                                'Subject': {'Data': subject_content, 'Charset': 'UTF-8'},
+                                'Body': {
+                                    'Html': {'Data': html_content, 'Charset': 'UTF-8'},
+                                    # Optionally, add a Text part:
+                                    # 'Text': {'Data': text_content, 'Charset': 'UTF-8'}
+                                }
                             }
-                        }
-                        # Optionally, add ConfigurationSetName if using SES Configuration Sets
-                        # ConfigurationSetName='your-config-set-name'
-                    )
+                            # Optionally, add ConfigurationSetName if using SES Configuration Sets
+                            # ConfigurationSetName='your-config-set-name'
+                        )
                     ses_message_id = response['MessageId']
                     # Create CampaignAnalytics record for 'sent'
                     CampaignAnalytics.objects.create(

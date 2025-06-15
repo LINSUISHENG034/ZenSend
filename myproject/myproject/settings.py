@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -20,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^8czf%bpz-*e-xrovgo&^%4a!b&r#v1jtl$nzequ)kjkh8m=aa'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-^8czf%bpz-*e-xrovgo&^%4a!b&r#v1jtl$nzequ)kjkh8m=aa')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -139,7 +140,6 @@ REST_FRAMEWORK = {
 # Celery Configuration Options
 # Ensure Redis server is running for these settings to work.
 # These URLs will be overridden by environment variables in docker-compose.yml when running in Docker.
-import os
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
@@ -148,3 +148,13 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC' # Optional: configure to your timezone
 # CELERY_TASK_TRACK_STARTED = True # Optional: to track task state more finely
 # CELERY_TASK_TIME_LIMIT = 30 * 60 # Optional: default time limit for tasks
+
+# AWS SES Configuration
+# For development/testing, you can use mock values or set these via environment variables
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', 'test_access_key')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', 'test_secret_key')
+AWS_SES_REGION_NAME = os.environ.get('AWS_SES_REGION_NAME', 'us-east-1')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'test@example.com')
+
+# For testing purposes, we can use a mock mode
+USE_MOCK_SES = os.environ.get('USE_MOCK_SES', 'True').lower() == 'true'
