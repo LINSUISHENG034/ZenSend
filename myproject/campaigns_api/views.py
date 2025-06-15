@@ -381,7 +381,7 @@ class SESWebhookView(APIView):
                     # Depending on the error, might want to stop or try next algo. For now, continue.
 
             if not signature_verified:
-                 logger.error("SNS Webhook: Signature verification failed for all attempted algorithms.")
+                logger.error("SNS Webhook: Signature verification failed for all attempted algorithms.")
             return signature_verified
 
         except requests.exceptions.RequestException as e:
@@ -467,20 +467,21 @@ class SESWebhookView(APIView):
 
                 return Response({'message': 'SNS Notification received and processed.'}, status=status.HTTP_200_OK)
 
-            else:
-                # This might be a direct SES event (not via SNS) or an unknown type
-                # Direct SES events (e.g. via Configuration Set -> HTTPS endpoint) have a different structure
-                # and don't use the SNS 'Type' or 'Message' fields in the same way.
-                # For this MVP, we'll assume SNS notifications as they are common.
-                # If direct HTTPS, the payload itself is the event data.
-                logger.warning(f"SES Webhook: Received unknown message type or direct SES event: {payload}")
-                # Log the payload for now. Processing will be in Task 4.2.
-                # process_direct_ses_event.delay(payload)
+        else:
+            # This might be a direct SES event (not via SNS) or an unknown type
+            # Direct SES events (e.g. via Configuration Set -> HTTPS endpoint) have a different structure
+            # and don't use the SNS 'Type' or 'Message' fields in the same way.
+            # For this MVP, we'll assume SNS notifications as they are common.
+            # If direct HTTPS, the payload itself is the event data.
+            logger.warning(f"SES Webhook: Received unknown message type or direct SES event: {payload}")
+            # Log the payload for now. Processing will be in Task 4.2.
+            # process_direct_ses_event.delay(payload)
+            try:
                 return Response({'message': 'Payload received and logged (type unknown or direct SES event).'}, status=status.HTTP_200_OK)
 
-        except Exception as e:
-            logger.error(f"SES Webhook: Unhandled error: {str(e)}")
-            return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                logger.error(f"SES Webhook: Unhandled error: {str(e)}")
+                return Response({"error": "An unexpected error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def process_ses_event(self, event_data):
         """

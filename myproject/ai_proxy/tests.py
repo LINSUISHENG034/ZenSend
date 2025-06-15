@@ -32,7 +32,7 @@ class AIGenerateViewTests(APITestCase):
                 del settings.OPENAI_API_KEY
 
 
-    @patch('myproject.ai_proxy.views.openai.OpenAI')
+    @patch('ai_proxy.views.openai.OpenAI')
     def test_ai_generate_success(self, MockOpenAI):
         # Configure mock client and its response object structure
         mock_openai_instance = MockOpenAI.return_value
@@ -74,7 +74,7 @@ class AIGenerateViewTests(APITestCase):
         self.assertIn('error', response.data)
         self.assertEqual(response.data['error'], 'Prompt must be a string.')
 
-    @patch('myproject.ai_proxy.views.openai.OpenAI')
+    @patch('ai_proxy.views.openai.OpenAI')
     def test_ai_generate_openai_api_connection_error(self, MockOpenAI):
         MockOpenAI.return_value.chat.completions.create.side_effect = openai.APIConnectionError(request=MagicMock())
         response = self.client.post(self.url, {'prompt': 'Test APIConnectionError'}, format='json')

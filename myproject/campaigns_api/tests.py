@@ -38,7 +38,6 @@ class SendCampaignTaskTests(APITestCase):
         self.campaign = Campaign.objects.create(
             owner=self.owner,
             name='Test Campaign Task',
-            subject='Test Campaign Subject', # This will be overridden by template subject
             template=self.template,
             recipient_group={"type": "all_contacts"}, # Simplified for test
             status='draft'
@@ -51,7 +50,7 @@ class SendCampaignTaskTests(APITestCase):
         settings.DEFAULT_FROM_EMAIL = 'test@example.com'
 
 
-    @patch('myproject.campaigns_api.tasks.boto3.client')
+    @patch('campaigns_api.tasks.boto3.client')
     def test_send_campaign_task_success(self, mock_boto_client):
         mock_ses_instance = MagicMock()
         mock_ses_instance.send_email.return_value = {'MessageId': 'test-ses-id-123'}
@@ -77,7 +76,7 @@ class SendCampaignTaskTests(APITestCase):
         self.assertIn(f'<p>Custom: {self.contact1.custom_fields["test_key"]}</p>', first_call_args['Message']['Body']['Html']['Data'])
 
 
-    @patch('myproject.campaigns_api.tasks.boto3.client')
+    @patch('campaigns_api.tasks.boto3.client')
     def test_send_campaign_task_ses_client_error(self, mock_boto_client):
         mock_ses_instance = MagicMock()
         # Simulate ClientError for the first email, success for the second to test mixed results
@@ -118,8 +117,8 @@ class SESWebhookViewTests(APITestCase):
             details={'info': 'Initial sent record for webhook test'}
         )
 
-    @patch('myproject.campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
-    @patch('myproject.campaigns_api.views.requests.get')
+    @patch('campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
+    @patch('campaigns_api.views.requests.get')
     def test_subscription_confirmation_success(self, mock_requests_get, mock_verify_sig):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -139,7 +138,7 @@ class SESWebhookViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         mock_requests_get.assert_called_once_with(payload['SubscribeURL'], timeout=10)
 
-    @patch('myproject.campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
+    @patch('campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
     def test_notification_processing_delivery(self, mock_verify_sig):
         event_payload = {
             "eventType": "Delivery",
@@ -175,7 +174,7 @@ class SESWebhookViewTests(APITestCase):
             event_type='delivered'
         ).exists())
 
-    @patch('myproject.campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
+    @patch('campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=True)
     def test_notification_processing_bounce(self, mock_verify_sig):
         event_payload = {
             "eventType": "Bounce",
@@ -198,7 +197,7 @@ class SESWebhookViewTests(APITestCase):
         self.contact.refresh_from_db()
         self.assertFalse(self.contact.allow_email) # Based on current webhook logic
 
-    @patch('myproject.campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=False)
+    @patch('campaigns_api.views.SESWebhookView._verify_sns_message_signature', return_value=False)
     def test_webhook_signature_failure(self, mock_verify_sig):
         payload = {"Type": "Notification", "Message": "{}", "MessageId": "x", "TopicArn": "y", "Timestamp": "z"} # Min valid for canonical
         response = self.client.post(self.url, json.dumps(payload), content_type='text/plain; charset=UTF-8')
